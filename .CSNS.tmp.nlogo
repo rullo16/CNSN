@@ -532,7 +532,7 @@ NIL
 
 BUTTON
 438
-102
+103
 637
 136
 setup-barabasi
