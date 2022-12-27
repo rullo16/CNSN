@@ -5,6 +5,7 @@ extensions [table]
 globals[
   link-weight
   sorted-turtles
+  infinity
 ]
 turtles-own[
   popular?
@@ -12,7 +13,9 @@ turtles-own[
   average-friends-of-friends
   num-friends
   num-friends-of-friends
+  distance-from-other-turtles
 ]
+
 ;;setup the model
 to setup
   clear-all
@@ -21,26 +24,20 @@ to setup
   reset-ticks
 end
 
-to go
-  update-links
+;;;;;;;;;;;;;;;
+;;Erdos-Renyi;;
+;;;;;;;;;;;;;;;
+
+;;Run Erdos-Renyi model
+to go-Erdos
+  update-links-Erdos
   update-average-friends
   update-average-friends-of-friends
   tick
 end
 
-;;create and initialize the agents
-
-to setup-turtles
-  create-turtles num-nodes
-  layout-circle turtles (max-pxcor - 1)
-  ask turtles [
-    set popular? false
-    if random-float 1.0 > 0.75 [ set popular? true ]
-  ]
-end
-
-;;update links between nodes
-to update-links
+;;update links between nodes using Erdos-Renyi model
+to update-links-Erdos
   ask turtles[
     ask links with [link-weight < prob-remove-friends]
     [die]
@@ -48,15 +45,220 @@ to update-links
   ;;add new links between nodes with a specified probability
   ask turtles [
     ifelse popular? [
-      create-links-with other turtles with [self > myself and random-float 1.0 < ( probability-making-friends + 0.25 )]
-      [set link-weight ( ( probability-making-friends - 0.25 ) + random-float 1.0 )]
+      create-links-with other turtles with [self > myself and random-float 1.0 < ( prob-making-friends + 0.25 )]
+      [set link-weight ( ( prob-making-friends - 0.25 ) + random-float 1.0 )]
     ][
-      create-links-with other turtles with [self > myself and random-float 1.0 < probability-making-friends]
-      [set link-weight ( probability-making-friends + random-float 1.0 )]
+      create-links-with other turtles with [self > myself and random-float 1.0 < prob-making-friends]
+      [set link-weight ( prob-making-friends + random-float 1.0 )]
     ]
   ]
 end
 
+
+
+;;;;;;;;;;;;;;;;;;
+;;Watts-Strogatz;;
+;;;;;;;;;;;;;;;;;;
+
+;;Setup the model to use the Watts-Strogatz
+to setup-Watts
+  clear-all
+  set infinity 999
+  setup-turtles-Watts
+  setup-initial-connections-small-world
+  set sorted-turtles sort turtles
+  reset-ticks
+end
+
+to go-Watts
+  update-links-Watts
+  update-average-friends
+  update-average-friends-of-friends
+  tick
+end
+
+;;create and initialize agents for Watts-Strogatz
+to setup-turtles-Watts
+  set-default-shape turtles "circle"
+  create-turtles num-nodes
+  layout-circle (sort turtles) (max-pxcor - 1)
+  ask turtles [
+    set popular? false
+    if random-float 1.0 > 0.75 [ set popular? true ]
+  ]
+end
+
+;;Set the initial connectivity of the network for Watts-Strogatz model
+to setup-initial-connections
+  ask turtles [
+    foreach sort turtles [
+      create-links-with other turtles with [distance myself < 2]
+    ]
+  ]
+end
+
+to setup-initial-connections-small-world
+  let n 0
+  while [ n < count turtles ] [
+    ; make edges with the next two neighbors
+    ; this makes a lattice with average degree of 4
+    make-edge turtle n
+              turtle ((n + 1) mod count turtles)
+              "default"
+    ; Make the neighbor's neighbor links curved
+    make-edge turtle n
+              turtle ((n + 2) mod count turtles)
+              "curve"
+    set n n + 1
+  ]
+
+  ; Because of the way NetLogo draws curved links between turtles of ascending
+  ; `who` number, two of the links near the top of the network will appear
+  ; flipped by default. To avoid this, we used an inverse curved link shape
+  ; ("curve-a") which makes all of the curves face the same direction.
+  ask link 0 (count turtles - 2) [ set shape "curve-a" ]
+  ask link 1 (count turtles - 1) [ set shape "curve-a" ]
+end
+
+
+to make-edge [ node-A node-B the-shape ]
+  ask node-A [
+    create-link-with node-B  [
+      set shape the-shape
+    ]
+  ]
+end
+
+;;update links between nodes using Watts-Strogatz model
+to update-links-Watts
+  if count turtles != num-nodes [ setup-Watts ]
+
+  let connected? false
+  while [ not connected? ] [
+    ask links [die]
+    setup-initial-connections-small-world
+    ask links [
+      if (random-float 1) < prob-making-friends [rewire-me]
+    ]
+
+    ifelse find-average-path-length = infinity [set connected? false] [ set connected? true]
+  ]
+end
+
+to rewire-me ; turtle procedure
+  ; node-A remains the same
+  let node-A end1
+  ; as long as A is not connected to everybody
+  if [ count link-neighbors ] of end1 < (count turtles - 1) [
+    ; find a node distinct from A and not already a neighbor of "A"
+    let node-B one-of turtles with [ (self != node-A) and (not link-neighbor? node-A) ]
+    ; wire the new edge
+    ask node-A [ create-link-with node-B [ set color cyan ] ]
+    die ; remove the old edge
+  ]
+end
+
+to-report find-average-path-length
+
+  let apl 0
+
+  ; calculate all the path-lengths for each node
+  find-path-lengths
+
+  let num-connected-pairs sum [length remove infinity (remove 0 distance-from-other-turtles)] of turtles
+
+  ; In a connected network on N nodes, we should have N(N-1) measurements of distances between pairs.
+  ; If there were any "infinity" length paths between nodes, then the network is disconnected.
+  ifelse num-connected-pairs != (count turtles * (count turtles - 1)) [
+    ; This means the network is not connected, so we report infinity
+    set apl infinity
+  ][
+    set apl (sum [sum distance-from-other-turtles] of turtles) / (num-connected-pairs)
+  ]
+
+  report apl
+end
+
+to find-path-lengths
+  ; reset the distance list
+  ask turtles [
+    set distance-from-other-turtles []
+  ]
+
+  let i 0
+  let j 0
+  let k 0
+  let node1 one-of turtles
+  let node2 one-of turtles
+  let node-count count turtles
+  ; initialize the distance lists
+  while [i < node-count] [
+    set j 0
+    while [ j < node-count ] [
+      set node1 turtle i
+      set node2 turtle j
+      ; zero from a node to itself
+      ifelse i = j [
+        ask node1 [
+          set distance-from-other-turtles lput 0 distance-from-other-turtles
+        ]
+      ][
+        ; 1 from a node to it's neighbor
+        ifelse [ link-neighbor? node1 ] of node2 [
+          ask node1 [
+            set distance-from-other-turtles lput 1 distance-from-other-turtles
+          ]
+        ][ ; infinite to everyone else
+          ask node1 [
+            set distance-from-other-turtles lput infinity distance-from-other-turtles
+          ]
+        ]
+      ]
+      set j j + 1
+    ]
+    set i i + 1
+  ]
+  set i 0
+  set j 0
+  let dummy 0
+  while [k < node-count] [
+    set i 0
+    while [i < node-count] [
+      set j 0
+      while [j < node-count] [
+        ; alternate path length through kth node
+        set dummy ( (item k [distance-from-other-turtles] of turtle i) +
+                    (item j [distance-from-other-turtles] of turtle k))
+        ; is the alternate path shorter?
+        if dummy < (item j [distance-from-other-turtles] of turtle i) [
+          ask turtle i [
+            set distance-from-other-turtles replace-item j distance-from-other-turtles dummy
+          ]
+        ]
+        set j j + 1
+      ]
+      set i i + 1
+    ]
+    set k k + 1
+  ]
+
+end
+
+;;;;;;;;;;;;;;;;;;;;;
+;;General-functions;;
+;;;;;;;;;;;;;;;;;;;;;
+
+
+;;create and initialize the agents
+to setup-turtles
+  set-default-shape turtles "circle"
+  create-turtles num-nodes
+  layout-circle turtles (max-pxcor - 1)
+  ask turtles [
+    set popular? false
+    if random-float 1.0 > 0.75 [ set popular? true ]
+  ]
+end
 
 ;;Update and calculate the average friends of a turtle
 to update-average-friends
@@ -111,10 +313,10 @@ ticks
 30.0
 
 BUTTON
-6
-21
-69
-54
+0
+103
+253
+136
 setup
 setup
 NIL
@@ -128,12 +330,12 @@ NIL
 1
 
 BUTTON
-105
-21
-168
-54
-go
-go
+0
+136
+253
+169
+go-Erdos
+go-Erdos
 T
 1
 T
@@ -145,15 +347,15 @@ NIL
 0
 
 SLIDER
-5
-62
-177
-95
-num-nodes
-num-nodes
 0
+10
+172
+43
+num-nodes
+num-nodes
+10
 100
-9.0
+33.0
 1
 1
 NIL
@@ -168,33 +370,33 @@ Average friends
 turtles
 avg-friends
 0.0
-5.0
-0.0
 10.0
+0.0
+1.0
 true
 false
-"set-plot-x-range 0 (num-nodes)\nset-plot-y-range 0 (num-nodes)" ""
+"set-plot-x-range 0 (num-nodes)" ""
 PENS
 "average friends" 1.0 1 -5298144 true "" "plot-pen-reset\nforeach sort turtles [ [t] -> ask t [ plot average-friends ] ]"
 
 INPUTBOX
-1
-103
-156
-163
-probability-making-friends
-0.5
+0
+42
+135
+102
+prob-making-friends
+0.25
 1
 0
 Number
 
 INPUTBOX
-160
-104
-315
-164
+134
+42
+253
+102
 prob-remove-friends
-0.25
+0.7
 1
 0
 Number
@@ -205,8 +407,8 @@ PLOT
 633
 449
 Average friends of friends
-NIL
-NIL
+turtles
+avg-friends-of-friends
 0.0
 10.0
 0.0
@@ -216,6 +418,40 @@ false
 "set-plot-x-range 0 (num-nodes)\nset-plot-y-range 0 (num-nodes)" ""
 PENS
 "average-friends-of-friends" 1.0 1 -14070903 true "" "plot-pen-reset\nforeach sort turtles [ [t] -> ask t [ plot average-friends-of-friends ] ]"
+
+BUTTON
+253
+103
+505
+136
+NIL
+setup-Watts
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+253
+136
+505
+169
+go-Wattz
+go-Watts
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+0
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -570,6 +806,28 @@ default
 -0.2 0 0.0 1.0
 0.0 1 1.0 0.0
 0.2 0 0.0 1.0
+link direction
+true
+0
+Line -7500403 true 150 150 90 180
+Line -7500403 true 150 150 210 180
+
+curve
+3.0
+-0.2 0 0.0 1.0
+0.0 0 0.0 1.0
+0.2 1 1.0 0.0
+link direction
+true
+0
+Line -7500403 true 150 150 90 180
+Line -7500403 true 150 150 210 180
+
+curve-a
+-3.0
+-0.2 0 0.0 1.0
+0.0 0 0.0 1.0
+0.2 1 1.0 0.0
 link direction
 true
 0
