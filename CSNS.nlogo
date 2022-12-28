@@ -21,19 +21,65 @@ turtles-own[
   num-friends-squared
   sum-friends-of-friends-squared
   distance-from-other-turtles
+  friendliness
 ]
 
-;;setup the model
-to setup
-  clear-all
-  setup-turtles
-  set sorted-turtles sort turtles
-  reset-ticks
+;;;;;;;;;;;;;;;
+;;Game-Theory;;
+;;;;;;;;;;;;;;;
+
+to create-links-game
+  ask turtles [
+    let potential-friends other turtles
+    ask potential-friends [
+      if friendliness <= [friendliness] of myself
+      [create-link-with myself]
+    ]
+  ]
+end
+
+to delete-links-game
+  ask turtles[
+   let connected-turtles link-neighbors
+   ask connected-turtles[
+      if friendliness < [friendliness] of myself [
+        if random-float 1 < prob-remove-friends [
+          ask link-with myself [die]
+        ]
+      ]
+    ]
+  ]
+end
+
+to go-game
+  ask turtles [
+    if random-float 1 < 0.1 [
+      ifelse popular? ;;set the friendliness for the game-theory model
+      [ set friendliness ( 1 - friendliness + popularity-weight) ];;popular people will be less keen on isolation than normal
+      [ set friendliness ( 1 - friendliness) ]
+    ]
+  ]
+  create-links-game
+  delete-links-game
+  update-average-friends
+  update-average-friends-of-friends
+  tick
 end
 
 ;;;;;;;;;;;;;;;
 ;;Erdos-Renyi;;
 ;;;;;;;;;;;;;;;
+
+;;setup the model using Erdos
+to setup-Erdos
+  clear-all
+  setup-turtles
+  update-links-Erdos
+  set sorted-turtles sort turtles
+  update-average-friends
+  update-average-friends-of-friends
+  reset-ticks
+end
 
 ;;Run Erdos-Renyi model
 to go-Erdos
@@ -53,7 +99,7 @@ to update-links-Erdos
   ask turtles [
     ifelse popular? [
       create-links-with other turtles with [self > myself and random-float 1.0 < ( prob-making-friends + 0.25 )]
-      [set link-weight ( ( prob-making-friends - 0.25 ) + random-float 1.0 )]
+      [set link-weight ( ( prob-making-friends + 0.25 ) + random-float 1.0 )]
     ][
       create-links-with other turtles with [self > myself and random-float 1.0 < prob-making-friends]
       [set link-weight ( prob-making-friends + random-float 1.0 )]
@@ -74,6 +120,8 @@ to setup-Watts
   setup-turtles-Watts
   setup-initial-connections-small-world
   set sorted-turtles sort turtles
+  update-average-friends
+  update-average-friends-of-friends
   reset-ticks
 end
 
@@ -91,7 +139,11 @@ to setup-turtles-Watts
   layout-circle (sort turtles) (max-pxcor - 1)
   ask turtles [
     set popular? false
-    if random-float 1.0 > 0.75 [ set popular? true ]
+    set popularity-weight popularity-weight-in
+    if random-float 1.0 < prob-being-popular [ set popular? true ]
+    ifelse popular? ;;set the friendliness for the game-theory model
+    [ set friendliness (random-float 1.0 + popularity-weight) ]
+    [ set friendliness random-float 1.0 ]
   ]
 end
 
@@ -258,6 +310,8 @@ to setup-barabasi
   clear-all
   setup-turtles-barabasi
   set sorted-turtles sort turtles
+  update-average-friends
+  update-average-friends-of-friends
   reset-ticks
 end
 
@@ -285,7 +339,7 @@ to make-node [old-node]
     ]
     ;;set a popularity weight instead of checking if the turtle is popular
     set popularity-weight 0.0
-    if random-float 1.0 > 0.75 [ set popularity-weight 0.25 ]
+    if random-float 1.0 < prob-being-popular [ set popularity-weight popularity-weight-in ]
   ]
 end
 
@@ -332,7 +386,11 @@ to setup-turtles
   ask turtles [
     set label who
     set popular? false
-    if random-float 1.0 > 0.75 [ set popular? true ]
+    set popularity-weight popularity-weight-in
+    if random-float 1.0 > prob-being-popular [ set popular? true ]
+    ifelse popular? ;;set the friendliness for the game-theory model
+    [ set friendliness (random-float 1.0 + popularity-weight) ]
+    [ set friendliness random-float 1.0 ]
   ]
 end
 
@@ -394,8 +452,8 @@ BUTTON
 102
 228
 136
-setup
-setup
+setup-Erdos
+setup-Erdos
 NIL
 1
 T
@@ -432,7 +490,7 @@ num-nodes
 num-nodes
 10
 100
-100.0
+10.0
 1
 1
 NIL
@@ -440,9 +498,9 @@ HORIZONTAL
 
 PLOT
 0
-209
+211
 316
-450
+452
 Average friends
 turtles
 avg-friends
@@ -473,7 +531,7 @@ INPUTBOX
 253
 102
 prob-remove-friends
-0.7
+0.2
 1
 0
 Number
@@ -565,15 +623,54 @@ NIL
 0
 
 SWITCH
-444
-168
-637
-201
+172
+10
+338
+43
 use-popularity-barabasi?
 use-popularity-barabasi?
 0
 1
 -1000
+
+INPUTBOX
+253
+42
+408
+102
+prob-being-popular
+0.25
+1
+0
+Number
+
+INPUTBOX
+408
+42
+552
+102
+popularity-weight-in
+0.25
+1
+0
+Number
+
+BUTTON
+4
+175
+84
+208
+NIL
+go-game
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+0
 
 @#$#@#$#@
 ## WHAT IS IT?
