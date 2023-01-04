@@ -181,7 +181,6 @@ to setup-initial-connections-small-world
   ask link 1 (count turtles - 1) [ set shape "curve-a" ]
 end
 
-
 to make-edge [ node-A node-B the-shape ]
   ask node-A [
     create-link-with node-B  [
@@ -221,12 +220,10 @@ to rewire-me ; turtle procedure
 end
 
 to-report find-average-path-length
-
   let apl 0
 
   ; calculate all the path-lengths for each node
   find-path-lengths
-
   let num-connected-pairs sum [length remove infinity (remove 0 distance-from-other-turtles)] of turtles
 
   ; In a connected network on N nodes, we should have N(N-1) measurements of distances between pairs.
@@ -253,12 +250,14 @@ to find-path-lengths
   let node1 one-of turtles
   let node2 one-of turtles
   let node-count count turtles
-  ; initialize the distance lists
+
+  ; initialize the list of distances
   while [i < node-count] [
     set j 0
     while [ j < node-count ] [
       set node1 turtle i
       set node2 turtle j
+
       ; zero from a node to itself
       ifelse i = j [
         ask node1 [
@@ -303,7 +302,6 @@ to find-path-lengths
     ]
     set k k + 1
   ]
-
 end
 
 ;;;;;;;;;;;;;;;;;;;
@@ -496,7 +494,7 @@ num-nodes
 num-nodes
 10
 100
-60.0
+10.0
 1
 1
 NIL
@@ -643,7 +641,7 @@ prob-making-friends
 prob-making-friends
 0
 1
-0.3
+0.5
 0.05
 1
 NIL
@@ -658,7 +656,7 @@ prob-remove-friends
 prob-remove-friends
 0
 1
-0.7
+0.5
 0.05
 1
 NIL
@@ -673,7 +671,7 @@ prob-being-popular
 prob-being-popular
 0
 1
-0.6
+0.5
 0.05
 1
 NIL
@@ -856,6 +854,16 @@ true
 "set-plot-x-range 0 (num-nodes)\nset-plot-y-range 0 1" ""
 PENS
 "popularity" 1.0 1 -16777216 true "" "plot-pen-reset\nforeach sort turtles [ [t] -> ask t [ ifelse popular? [plot 1] [plot 0.5] ]]"
+
+TEXTBOX
+977
+245
+1352
+263
+Keeps track on which turtles are popular, 0.5 not popular, 1 popular\n
+11
+0.0
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
