@@ -820,11 +820,11 @@ Run Barabasi model
 1
 
 TEXTBOX
-677
-454
-827
-482
-Run Game Theory model(only with Erdos and Watts setup)
+690
+471
+840
+499
+Run Game Theory model(only with Erdos and Watts)
 11
 0.0
 1
